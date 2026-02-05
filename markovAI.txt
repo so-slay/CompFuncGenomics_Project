@@ -1,0 +1,101 @@
+Choosing the Optimal Markov Order in Bioinformatics
+==================================================
+
+Background
+----------
+A standard Position Weight Matrix (PWM) corresponds to a 0th-order
+Markov model, assuming independence between positions. Higher-order
+Markov models capture dependencies between neighboring symbols but
+introduce many more parameters.
+
+The goal is to choose an order that balances:
+- Model expressiveness
+- Data sparsity
+- Generalization to unseen sequences
+
+"Optimal" order means best predictive performance on held-out data,
+not maximum likelihood on the training set.
+
+--------------------------------------------------
+
+Methods to Choose Markov Order
+------------------------------
+
+1. Cross-Validation
+   - Split data into training and validation sets (or k-fold CV)
+   - Train models with order k = 0,1,2,...
+   - Evaluate on held-out data using:
+       * log-likelihood
+       * classification metrics (AUC, accuracy) if labels exist
+   - Choose smallest k that maximizes validation performance
+
+   Pros:
+   - Directly measures generalization
+   - Model-agnostic
+
+   Cons:
+   - Computationally expensive
+
+--------------------------------------------------
+
+2. Information Criteria (AIC / BIC)
+   - Compute log-likelihood on training data
+   - Penalize model complexity
+
+   AIC = -2 log L + 2 p
+   BIC = -2 log L + p log N
+
+   where:
+   - p = number of parameters (≈ 3 * 4^k for DNA)
+   - N = number of observations
+
+   Interpretation:
+   - AIC allows larger models
+   - BIC is more conservative
+
+--------------------------------------------------
+
+3. Likelihood Ratio Tests
+   - Compare nested models (k vs k+1)
+   - Test whether added complexity significantly improves likelihood
+   - Stop increasing order when improvement is not significant
+
+   Caveat:
+   - Assumptions may break for sparse sequence data
+
+--------------------------------------------------
+
+4. Parameter-to-Data Ratio Heuristic
+   - Ensure sufficient data per parameter
+   - Rule of thumb: 5–10 observations per parameter
+
+   Approximate parameter growth for DNA:
+   - k=0: 3
+   - k=1: 12
+   - k=2: 48
+   - k=3: 192
+   - k=4: 768
+
+   High orders require genome-scale data.
+
+--------------------------------------------------
+
+Practical Bioinformatics Guidelines
+-----------------------------------
+- TF binding motifs:
+    * Order 0 or 1 usually sufficient
+    * Order 2 only with large datasets
+- Genomic background models:
+    * Orders 3–5 possible with whole-genome data
+- Always apply smoothing (pseudocounts, priors)
+- Validate on held-out sequences
+
+--------------------------------------------------
+
+Key Limitation of Fixed-Order Models
+-----------------------------------
+Fixed-order models assume the same dependency length everywhere in the
+sequence, which is biologically unrealistic and leads to either
+underfitting or overfitting.
+
+This motivates Variable-Length Markov Models (VLMMs).
