@@ -1,3 +1,4 @@
+import subprocess
 import sys 
 import os 
 from pathlib import Path
@@ -11,8 +12,9 @@ def read_config(path):
     config = {}
 
     with open(path, "r") as f:
-        for line in f: 
-            line = line.strip()
+        for line in f:
+            if line: 
+                line = line.strip()
         # Ignore empty lines/comments (start with #)
             if not line or line.startswith("#"):
                 continue
@@ -21,9 +23,9 @@ def read_config(path):
     return config
 
 # Pull information from specified config file 
-config_path = sys.argv[1]
+config_path = sys.argv[1] if len(sys.argv) > 1 else "config.txt"
 config = read_config(config_path)
-
+print(config)
 input_dir = Path(config["input_dir"])
 if not input_dir.exists() or not input_dir.is_dir(): 
     print("FATAL: No input directory specified")
@@ -59,8 +61,13 @@ for fname in files:
     with open(f"{output_tsv}", "w") as f:
         df.to_csv(f, sep="\t", header=False, index=False)
 
-
-
 # Extra Credit:
 
 # Write the headers of the files to a log file
+
+# Section 3: Fetch Sequence from Reference Genome using bedtools getfasta
+# Write output into separate dir.
+
+bash_script = "GetFastaFromBED.sh"
+
+def 
