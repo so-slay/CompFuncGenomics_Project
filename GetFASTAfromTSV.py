@@ -53,7 +53,7 @@ if not files:
 # Section 2: Convert tsv to BED file
 for fname in files:
     input_tsv = input_dir / fname
-    output_tsv = os.path.splitext(input_tsv)[0] + '.bed'
+    output_tsv = input_tsv.with_suffix(".bed") 
     df = pd.read_csv(input_tsv, sep="\t")
 
     # Remove header, save in BED-like tab sep format.
@@ -68,6 +68,27 @@ for fname in files:
 # Section 3: Fetch Sequence from Reference Genome using bedtools getfasta
 # Write output into separate dir.
 
-bash_script = "GetFastaFromBED.sh"
+bash_script = Path(__file__).parent / "GetFastaFromBED.sh"
 
-def 
+bed_files = [f.name for f in input_dir.glob("*.bed")]
+
+
+def bedtools_getfasta(input_files):
+    output_dir = Path("FASTAs")
+    output_dir.mkdir(exist_ok=True)
+
+    for i in input_files:
+        input_bed = input_dir / i
+        output_fa = output_dir / f'{input_bed.stem}.fa'
+        print("input_bed:", input_bed)
+        print("exists:", input_bed.exists())
+
+        
+        try:
+            subprocess.run([bash_script, input_bed, output_fa], check=1)
+        except subprocess.CalledProcessError as e:
+            print(f"error in file {i}: {e}")
+    print(f"FASTAs Fetched, Output written to {output_dir}")
+        
+
+bedtools_getfasta(bed_files)
