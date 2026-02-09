@@ -1,11 +1,10 @@
 # Config/Input File for CFG: Markov Project.
 # Specify input location. The FASTA files will be written to the same folder
 # For folders: use this format:
-input_dir = /path/to/data/
-#CompFuncGenomics_Project/
+input_dir =
 # If needed, specify files. Default, all *.tsv will be run
 # Separate files with commas
-files = /files/if/needed
+files = chr1_200bp_bins.tsv
 # Specify order "m" for Markov chain
 markov_order = 4
 # Specify k for k-fold Cross Validation
