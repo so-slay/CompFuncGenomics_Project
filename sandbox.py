@@ -26,6 +26,7 @@ for seq in [r]:
 # Work for tomorrow:
 """
 1. evolution assignment
+TRAIN SEPARATE MODELS
 2. Cross validation over k 0 to 10
 3. AUC, ROC
 4. RUN whole on all.
