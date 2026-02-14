@@ -3,7 +3,7 @@ import math
 import numpy as np 
 import pandas as pd 
 import GetFASTAfromTSV as gf 
-from collections import Counter, defaultdict
+
 
 header = ['chr', 'start', 'stop', 'ATAC', 'CTCF', 'REST', 'EP300', 'sequence' ]
 
@@ -57,12 +57,10 @@ for k, df in dict_of_dfs.items():
     # Convert U B to Boolean with bind_Boolmap
     df[cols_to_Bool] = df[cols_to_Bool].apply(lambda col: col.map(bind_Boolmap))
 
-    # Count using Counter for 0-order markov model:
-    df.loc[mask, 'counts'] = df.loc[mask, 'sequence'].apply(Counter)
-
-    # Convert counts to probabilities:
-    df.loc[mask, "probs"] = df.loc[mask, "counts"].apply(lambda c: {k: v/sum(c.values()) for k,v in c.items()})
-
+    # Yeet NaNs in col1
+    df2 = df.copy() 
+    df2 = df2.dropna(subset=[df2.columns[0]])
+    dict_of_dfs[k] = df2
 
 ## Markov Model of Order 0: Calculate nucleotide frequencies (background) for bound, unbound
 which_factor = "CTCF"
@@ -73,32 +71,17 @@ nucleotides = ["A", "C", "G", "T"]
 
 bg_stats = {k:{"bound":pd.Series(dtype=float) , "unbound":pd.Series(dtype=float)}for k in dict_of_dfs.keys()}
 
-for k, df in dict_of_dfs.items():    
-    # Make ATCG counts a df
-    df = df[df["probs"].apply(lambda x: isinstance(x, dict))] # drop None instances
-    prob_df = df["probs"].apply(lambda d: {nt: d.get(nt, 0) for nt in nucleotides}).apply(pd.Series)
-    
-    # Create a mask from parent df:
-    bound_mask  = df[which_factor] == 1    
-
-    # Calculate averages for bound, unbound
-    bound_avg = prob_df[bound_mask].mean(axis=0) 
-    unbound_avg = prob_df[~bound_mask].mean(axis=0) 
-    bg_stats[k] = {"bound":bound_avg, "unbound":unbound_avg}
-    print(f"{df} stats: Bound Probs: {bound_avg} , Unbound Probs:{unbound_avg}")
-
-
 # Define a k-th order markov model fn, where k is an integer from 1 to 10
 # k = gf.config["MarkovOrder"]
 order_k = int(3)
 
 # Build a function to work on any sequence string
 # Iterate over list of sequences
-# do this in bound/unbound sets for specified factor
+# do this in bound/unbound sets for specified factor in all dfs
 
 def markov_k(seq_list, k=order_k):
     pseudoc = int(1)
-    counts = defaultdict(Counter)
+    counts = {}
 
     # Consider a sequence of Length = L
     # for a sliding window, we can go from i = 1 to i = L-k (1 based)
@@ -107,9 +90,18 @@ def markov_k(seq_list, k=order_k):
         for i in range(len(seq) - k):
             k_prefix = seq[i:i+k] # These functions not inclusive of upper arg == until i+k-1 etc
             k_letter = seq[i+k]
-            # Build nested dictionary of outer 'k_prefix'es
-            # then count each occurence of the 'next'==kth letter 
+
+            # Build nested dictionary of outer 'k_prefix'es 
+            if k_prefix not in counts:
+                counts[k_prefix] = {}
+
+            # Then count each occurence of the 'next'==kth letter
+            if k_letter not in counts[k_prefix]:
+                counts[k_prefix][k_letter] = 0
+
             counts[k_prefix][k_letter] +=1
+
+
     markov_model = {}
     
     for k_prefix,vals in counts.items():
@@ -131,19 +123,29 @@ def log_likelihood_scorer(seq, markov_model, k=order_k):
         log_lhood += markov_model.get(k_prefix, {}).get(k_letter, default_log_p)
     return log_lhood
 
+
+def markov_scores(df_bu):
+    # Extract sequence col as list
+    sequences = df_bu["sequence"].tolist()
+    # Run Markov model of order k on 
+    model = markov_k(sequences, order_k)
+
+    df_bu = df_bu.copy()
+    df_bu["ll"] = df_bu["sequence"].apply(
+        lambda seq: log_likelihood_scorer(seq, model, order_k)
+    )
+    return df_bu, df_bu["ll"].mean()
+
+# Run for all dfs in dict
 for k, df in dict_of_dfs.items():
-    # learn Markov model of order k 
+    # learn Markov model of order k FOR EACH CLASS!
     # Write log_likelihood scores
     # Calculate scores in bound vs. unbound sets
-    sequences = df["sequence"].tolist()
-    row_markov = markov_k(sequences, order_k)
-    # ll is short for Log-Likelihood :)
-    df["ll"] = df["sequence"].apply(lambda c: log_likelihood_scorer(c, row_markov, order_k))
-
-    # define bound set:
     bound_mask  = df[which_factor] == 1 
-    bound_avg = df.loc[bound_mask, "ll"].mean()
-    unbound_avg = df.loc[~bound_mask, "ll"].mean()
-
+    df.loc[bound_mask], bound_avg  = markov_scores(df.loc[bound_mask])
+    df.loc[~bound_mask], unbound_avg  = markov_scores(df.loc[~bound_mask])
+    
     bg_stats[k] = {"bound":bound_avg, "unbound":unbound_avg}
     print(f"{df} stats: Bound Probs: {bound_avg} , Unbound Probs:{unbound_avg}")
+
+
