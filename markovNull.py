@@ -80,7 +80,7 @@ order_k = int(3)
 # do this in bound/unbound sets for specified factor in all dfs
 
 def markov_k(seq_list, k=order_k):
-    pseudoc = int(1)
+
     counts = {}
 
     # Consider a sequence of Length = L
@@ -101,51 +101,70 @@ def markov_k(seq_list, k=order_k):
 
             counts[k_prefix][k_letter] +=1
 
-
-    markov_model = {}
     
+    markov_model = {}
+    # Convert raw counts into probabilities
+    # pseudocounts (For postmidsem- Bayesian stuff) 
+    pseudoc = int(0)
     for k_prefix,vals in counts.items():
         total = sum(v + pseudoc for v in vals.values())
+
         markov_model[k_prefix] = {}
 
-        for nt in nucleotides:
+        for nt in nucleotides: #Refer line 70 for nucleotides
             count = vals.get(nt, 0) + pseudoc
             prob = count/total
             markov_model[k_prefix][nt] = math.log(prob)
+
     return markov_model
 
-def log_likelihood_scorer(seq, markov_model, k=order_k):
+def sequence_score(seq, markov_model, k=order_k):
+
+    # Score each sequence in the list using the trained model 
     default_log_p = -100
     log_lhood = 0.0
-    for i in range(len(seq) -k):
+
+    for i in range(len(seq) - k):
         k_prefix = seq[i:i+k] 
         k_letter = seq[i+k]
         log_lhood += markov_model.get(k_prefix, {}).get(k_letter, default_log_p)
     return log_lhood
 
 
-def markov_scores(df_bu):
+def loglikely(df, bdd_mask):
+
+    # Input: df, bound and unbound markov models
+    # Output: log_likelihood ratio for each sequence in 
+
     # Extract sequence col as list
-    sequences = df_bu["sequence"].tolist()
-    # Run Markov model of order k on 
-    model = markov_k(sequences, order_k)
+    bound_seqs = df.loc[bound_mask, "sequence"].tolist()
+    unbound_seqs = df.loc[~bound_mask, "sequence"].tolist()
 
-    df_bu = df_bu.copy()
-    df_bu["ll"] = df_bu["sequence"].apply(
-        lambda seq: log_likelihood_scorer(seq, model, order_k)
+    # learn Markov model of order k on it
+    bdd_model = markov_k(bound_seqs, order_k)
+    unb_model = markov_k(unbound_seqs, order_k)
+
+    # Calculate log-likelihoods from each model
+    ll_bdd = df["sequence"].apply(
+        lambda seq: sequence_score(seq, bdd_model)
     )
-    return df_bu, df_bu["ll"].mean()
+    ll_unb = df["sequence"].apply(
+        lambda seq: sequence_score(seq, unb_model)
+    )
 
-# Run for all dfs in dict
+    llr = ll_bdd - ll_unb
+    return llr
+
+
 for k, df in dict_of_dfs.items():
-    # learn Markov model of order k FOR EACH CLASS!
-    # Write log_likelihood scores
+    # learn Markov model of order k FOR EACH CLASS
+    # Write log-likelihood sequence scores to sequences in these classes
     # Calculate scores in bound vs. unbound sets
     bound_mask  = df[which_factor] == 1 
-    df.loc[bound_mask], bound_avg  = markov_scores(df.loc[bound_mask])
-    df.loc[~bound_mask], unbound_avg  = markov_scores(df.loc[~bound_mask])
+
+    df["llr"] = loglikely(df, bound_mask)
     
-    bg_stats[k] = {"bound":bound_avg, "unbound":unbound_avg}
-    print(f"{df} stats: Bound Probs: {bound_avg} , Unbound Probs:{unbound_avg}")
+    print(df.head())
 
 
+# WE BALLLLLLL
