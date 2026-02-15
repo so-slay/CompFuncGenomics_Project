@@ -1,8 +1,6 @@
 import subprocess
 import sys 
-import os 
 from pathlib import Path
-
 import pandas as pd
 
 # Section 1: read CONFIG file
@@ -26,13 +24,13 @@ def read_config(path):
 config_path = sys.argv[1] if len(sys.argv) > 1 else "config.txt"
 config = read_config(config_path)
 print(config)
-input_dir = Path(config["input_dir"])
-if not input_dir.exists() or not input_dir.is_dir(): 
-    print("FATAL: No input directory specified")
+input_dir = Path(config["input_dir"] or ".").resolve()
+if not input_dir.is_dir(): 
+    print(f"FATAL: specified input is not a dir: {input_dir}")
     sys.exit(1)
 
 files = config.get("files")
-
+# default is to get all .tsv in specified dir
 if files:
     files = [f.strip() for f in files.split(",")]
     tsv = []
@@ -60,9 +58,9 @@ for fname in files:
     # write output as headerless bed file
     with open(f"{output_tsv}", "w") as f:
         df.to_csv(f, sep="\t", header=False, index=False)
+    
 
 # Extra Credit:
-
 # Write the headers of the files to a log file
 
 # Section 3: Fetch Sequence from Reference Genome using bedtools getfasta
@@ -90,5 +88,5 @@ def bedtools_getfasta(input_files):
             print(f"error in file {i}: {e}")
     print(f"FASTAs Fetched, Output written to {output_dir}")
         
-
-bedtools_getfasta(bed_files)
+# Uncomment, currently in development so using cached output
+#bedtools_getfasta(bed_files)
