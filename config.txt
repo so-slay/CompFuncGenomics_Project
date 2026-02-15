@@ -1,12 +1,15 @@
-# Config/Input File for CFG: Markov Project.
-# Specify input location. The FASTA files will be written to the same folder
+# Config File for CFG: Markov Project.
+# Specify input location. The FASTA files and other outputs will be written to subfolders of this same folder
 # For folders: use this format:
 input_dir =
-# If needed, specify files. Default, all *.tsv will be run
-# Separate files with commas
+# If needed, specify files. Default, all *.tsv will be run. Separate file names with commas
 files = chr1_200bp_bins.tsv
 # Specify order "m" for Markov chain
-markov_order = 4
+markov_order = 10
 # Specify k for k-fold Cross Validation
-k_fold = 3
+k_fold = 5
+# Specify which factor: Choose from CTCF, REST or EP300
+which_factor = CTCF
 
+
+# Helpful to note: do not use "quotes" on filenames or other arguments

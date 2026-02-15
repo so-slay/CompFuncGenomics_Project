@@ -3,7 +3,8 @@ import math
 import numpy as np 
 import pandas as pd 
 import GetFASTAfromTSV as gf 
-
+import time 
+start = time.time()
 
 header = ['chr', 'start', 'stop', 'ATAC', 'CTCF', 'REST', 'EP300', 'sequence' ]
 
@@ -62,8 +63,12 @@ for k, df in dict_of_dfs.items():
     df2 = df2.dropna(subset=[df2.columns[0]])
     dict_of_dfs[k] = df2
 
-## Markov Model of Order 0: Calculate nucleotide frequencies (background) for bound, unbound
-which_factor = "CTCF"
+## Markov Model of Order k:
+# Define a k-th order markov model fn, where k is an integer from 1 to 10
+
+order_k = int(gf.config.get("markov_order"))
+which_factor = gf.config.get("which_factor")
+
 # which_factors = gf.config["which_factor"]
 # atac = gf.config["USE ATAC info?"]
 
@@ -71,9 +76,6 @@ nucleotides = ["A", "C", "G", "T"]
 
 bg_stats = {k:{"bound":pd.Series(dtype=float) , "unbound":pd.Series(dtype=float)}for k in dict_of_dfs.keys()}
 
-# Define a k-th order markov model fn, where k is an integer from 1 to 10
-# k = gf.config["MarkovOrder"]
-order_k = int(3)
 
 # Build a function to work on any sequence string
 # Iterate over list of sequences
@@ -88,7 +90,7 @@ def markov_k(seq_list, k=order_k):
     # in 0-based indexing this is i = 0  to L-1-k
     for seq in seq_list:
         for i in range(len(seq) - k):
-            k_prefix = seq[i:i+k] # These functions not inclusive of upper arg == until i+k-1 etc
+            k_prefix = seq[i:i+k] 
             k_letter = seq[i+k]
 
             # Build nested dictionary of outer 'k_prefix'es 
@@ -105,7 +107,7 @@ def markov_k(seq_list, k=order_k):
     markov_model = {}
     # Convert raw counts into probabilities
     # pseudocounts (For postmidsem- Bayesian stuff) 
-    pseudoc = int(0)
+    pseudoc = int(1)
     for k_prefix,vals in counts.items():
         total = sum(v + pseudoc for v in vals.values())
 
@@ -155,16 +157,19 @@ def loglikely(df, bdd_mask):
     llr = ll_bdd - ll_unb
     return llr
 
+# Pls Ignore stuff below, older function not deleting because useful syntactically
 
-for k, df in dict_of_dfs.items():
-    # learn Markov model of order k FOR EACH CLASS
-    # Write log-likelihood sequence scores to sequences in these classes
-    # Calculate scores in bound vs. unbound sets
-    bound_mask  = df[which_factor] == 1 
+# for k, df in dict_of_dfs.items():
+#     # learn Markov model of order k FOR EACH CLASS
+#     # Write log-likelihood sequence scores to sequences in these classes
+#     # Calculate scores in bound vs. unbound sets
+#     bound_mask  = df[which_factor] == 1 
 
-    df["llr"] = loglikely(df, bound_mask)
+#     df["llr"] = loglikely(df, bound_mask)
     
-    print(df.head())
+#     print(df.head())
 
-
-# WE BALLLLLLL
+end = time.time()
+# Write each df out into cache
+helperRunTime = end - start
+print(f"Runtime: {helperRunTime} seconds")
