@@ -1,13 +1,110 @@
-# CompFuncGenomics_Project
-CFG Project Repo: Spring 2026
-1. TSV converted to BED for using Bedtools Getfasta tool
-2. run GetFASTAfromBED.sh on these files 
-    This used bedtools to fetch the fasta sequences
-3. Read the FASTA and bed files, concatenate them into a pandas dataframe
-3.1: Preprocess Data to remove NaNs or Unmapped regions
-4. Markov times:
-read whether the TF is Bound or unbound and calculate probabilities 
-4.1: Null Markov model: Raw counts of each nucleotide
-4.2: Order-1 MM: Look at all 2-mers and count how many times, say AA out of AA+AT+AC+AG etc. and calculate log likelihoods
-4.3: Order-k MM: Look at all (k+1)-mers and look at how many times the last letter is say, A, given the prefix is the same. Calculate log likelihoods.
+# CompFuncGenomics_Project (CFG)
+
+**CFG Project Repo — Spring 2026**  
+
+Python-based pipeline to process genomic sequences and calculate Markov model probabilities for transcription factor (TF) binding analysis.
+
+---
+
+## Project Workflow
+
+1. **TSV → BED conversion**  
+   Convert input TSV files into BED format to be used with Bedtools `getfasta`.  
+
+2. **Fetch sequences**  
+   Run `GetFASTAfromBED.sh` to fetch FASTA sequences using Bedtools.  
+
+3. **Read and preprocess data**  
+   - Load FASTA and BED files into a pandas DataFrame.  
+   - Clean the data: remove `NaN`s and unmapped regions.  
+
+4. **Markov model analysis**  
+   - Determine whether each TF is **Bound** or **Unbound**.  
+   - Calculate nucleotide probabilities with different order Markov models:  
+
+   **4.1 Null Markov model**  
+   - Raw counts of each nucleotide.  
+
+   **4.2 Order-1 Markov model**  
+   - Count all 2-mers (e.g., AA, AT, AC, AG) and compute log-likelihoods.  
+
+   **4.3 Order-k Markov model**  
+   - Count all (k+1)-mers.  
+   - For a given prefix, calculate the probability of the last nucleotide and compute log-likelihoods.  
+
+---
+
+## Configuration
+
+### Quick Start
+In a hurry?  
+The simplest way to run this code:
+
+1. Place the `.tsv` file(s) of interest in the same folder as `00_Main.py`.  
+2. Run `00_Main.py` with no arguments
+- Code uses the current working directory (`pwd`) as the input directory.  
+- The code will automatically process **all `.tsv` files** in this directory.
+
+
+Default parameters are set in `Default_config.py`:
+
+| Parameter       | Default Value               | Description |
+|-----------------|----------------------------|-------------|
+| `input_dir`     | (user-specified folder)     | Base folder for input FASTA/TSV files and outputs |
+| `files`         | chr4_200bp_bins.tsv         | TSV files to process (comma-separated if multiple) |
+| `markov_order`  | 10                          | Order for Markov chain |
+| `k_fold`        | 5                           | Number of folds for cross-validation |
+| `which_factor`  | CTCF                        | Choose TF: CTCF, REST, or EP300 |
+
+**Notes:**  
+- All outputs (TSV, plots, logs) are written to subfolders of `input_dir`.  
+- Filenames should **not** include quotes.  
+
+
+### Detailed Run Instructions:
+## Detailed Run Instructions
+
+### Quick Tweaks
+For small changes, you can directly edit the arguments in `default_config.txt`.
+
+### Custom/Reproducible Runs
+
+For record-keeping/choosing specific files from a list of files and other complications:
+
+1. **Create a new config file**  
+   - Make a copy of `default_config.txt` and modify the arguments as needed.
+
+2. **Run with custom config**  
+   - Pass your config file as an argument to `00_Main.py` like so:
+
+   ```bash
+   python3 00_Main.py config.txt
+---
+
+## Dependencies
+
+### System-level tools
+- **bedtools**: v2.31.1  
+
+### Python
+- **Python**: 3.12.7  
+
+### Python Libraries
+
+#### Standard / built-in libraries
+- `os`, `sys`, `time`, `math`, `pathlib`, `subprocess`  
+
+#### Installed libraries (via pip / conda)
+- `numpy`  
+- `pandas`  
+- `matplotlib`  
+- `scikit-learn`  
+- `tqdm`  (soon)
+
+#### Helper libraries
+- `GetFASTAfromTSV` (`gf`)  
+- `markovNull` (`mm`)  
+
+---
+
 
