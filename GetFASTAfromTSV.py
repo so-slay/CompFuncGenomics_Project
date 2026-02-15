@@ -11,8 +11,7 @@ def read_config(path):
 
     with open(path, "r") as f:
         for line in f:
-            if line: 
-                line = line.strip()
+            line = line.strip()
         # Ignore empty lines/comments (start with #)
             if not line or line.startswith("#"):
                 continue
@@ -21,9 +20,10 @@ def read_config(path):
     return config
 
 # Pull information from specified config file 
-config_path = sys.argv[1] if len(sys.argv) > 1 else "config.txt"
+config_path = sys.argv[1] if len(sys.argv) > 1 else "Default_config.txt"
 config = read_config(config_path)
 print(config)
+ref_genome = Path(config.get("ref_genome"))
 input_dir = Path(config["input_dir"] or ".").resolve()
 if not input_dir.is_dir(): 
     print(f"FATAL: specified input is not a dir: {input_dir}")
@@ -48,8 +48,27 @@ if not files:
     print("FATAL: No tsv files found in specified input_dir")
     sys.exit(1)
 
-# Section 2: Convert tsv to BED file
+# Check for existing BED files: 
+
+# Check existence of .bed and .fasta files for each TSV
+files_to_convert = []
+files_to_fetch = []
+
 for fname in files:
+    bed_file = input_dir / Path(fname).with_suffix(".bed")
+    fasta_file = Path("FASTAs") / Path(fname).with_suffix(".fa")
+    
+    if bed_file.exists() and fasta_file.exists():
+        continue
+    elif fasta_file.exists() and not bed_file.exists():
+        files_to_convert.append(fname)
+    else:
+        print(f"Fetching FASTAs from reference genome at {config.get("ref_genome")} for {fname}")
+        files_to_convert.append(fname)  # Need BED first
+        files_to_fetch.append(fname)
+
+# Section 2: Convert tsv to BED file
+for fname in files_to_convert:
     input_tsv = input_dir / fname
     output_tsv = input_tsv.with_suffix(".bed") 
     df = pd.read_csv(input_tsv, sep="\t")
@@ -68,7 +87,7 @@ for fname in files:
 
 bash_script = Path(__file__).parent / "GetFastaFromBED.sh"
 
-bed_files = [f.name for f in input_dir.glob("*.bed")]
+bed_files = [Path(f).with_suffix(".bed").name for f in files_to_fetch]
 
 
 def bedtools_getfasta(input_files):
@@ -83,10 +102,13 @@ def bedtools_getfasta(input_files):
 
         
         try:
-            subprocess.run([bash_script, input_bed, output_fa], check=1)
+            subprocess.run([bash_script, input_bed, output_fa, ref_genome], check=1)
         except subprocess.CalledProcessError as e:
             print(f"error in file {i}: {e}")
     print(f"FASTAs Fetched, Output written to {output_dir}")
         
-# Uncomment, currently in development so using cached output
-#bedtools_getfasta(bed_files)
+
+if __name__ == "__main__":
+    
+    bedtools_getfasta(bed_files)
+    pass
