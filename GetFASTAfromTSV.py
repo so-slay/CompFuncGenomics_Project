@@ -20,7 +20,7 @@ def read_config(path):
     return config
 
 # Pull information from specified config file 
-config_path = sys.argv[1] if len(sys.argv) > 1 else "Default_config.txt"
+config_path = sys.argv[1] if len(sys.argv) > 1 else "01Default_config.txt"
 config = read_config(config_path)
 print(config)
 ref_genome = Path(config.get("ref_genome"))
@@ -105,7 +105,7 @@ def bedtools_getfasta(input_files):
             subprocess.run([bash_script, input_bed, output_fa, ref_genome], check=1)
         except subprocess.CalledProcessError as e:
             print(f"error in file {i}: {e}")
-    print(f"FASTAs Fetched, Output written to {output_dir}")
+    print(f"FASTAs written to {output_dir} if not already present")
         
 
 if __name__ == "__main__":

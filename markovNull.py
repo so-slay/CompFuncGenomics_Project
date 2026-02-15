@@ -120,18 +120,23 @@ def markov_k(seq_list, k=order_k):
 
     return markov_model
 
-def sequence_score(seq, markov_model, k=order_k):
+def sequence_score(seq, markov_pos_model, markov_neg_model, k=order_k):
 
-    # Score each sequence in the list using the trained model 
-    default_log_p = -100
+    # Score each sequence in the list using the trained models 
+    default_log_p = math.log(1e-6)
     log_lhood = 0.0
 
     for i in range(len(seq) - k):
         k_prefix = seq[i:i+k] 
         k_letter = seq[i+k]
-        log_lhood += markov_model.get(k_prefix, {}).get(k_letter, default_log_p)
+
+        bdd_score = markov_pos_model.get(k_prefix, {}).get(k_letter, default_log_p)
+        unb_score = markov_neg_model.get(k_prefix, {}).get(k_letter, default_log_p)
+        log_lhood += (bdd_score - unb_score)
     return log_lhood
 
+
+# Pls Ignore stuff below, older function not deleting because useful syntactically
 
 def loglikely(df, bdd_mask):
 
@@ -157,7 +162,6 @@ def loglikely(df, bdd_mask):
     llr = ll_bdd - ll_unb
     return llr
 
-# Pls Ignore stuff below, older function not deleting because useful syntactically
 
 # for k, df in dict_of_dfs.items():
 #     # learn Markov model of order k FOR EACH CLASS
@@ -172,4 +176,4 @@ def loglikely(df, bdd_mask):
 end = time.time()
 # Write each df out into cache
 helperRunTime = end - start
-print(f"Runtime: {helperRunTime} seconds")
+print(f"Runtime (loading markov helpers): {helperRunTime} seconds")

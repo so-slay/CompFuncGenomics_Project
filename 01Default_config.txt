@@ -1,0 +1,29 @@
+# =========================================================
+# Default Config File for CFG: Markov Project
+# =========================================================
+
+
+# Helpful to note: do not use "quotes" on filenames or other arguments
+
+# Input directory
+# All FASTA files and outputs will be written to subfolders of this directory
+input_dir = 
+
+# Default: all *.tsv files in the input_dir
+
+# Specific files to process?
+# Separate multiple files with commas
+files = chr4_200bp_bins.tsv
+
+# Markov chain order
+markov_order = 10
+
+# Number of folds for k-fold cross-validation
+k_fold = 5
+
+# Choose factor for analysis: options are CTCF, REST, or EP300
+which_factor = CTCF
+
+# This is needed only if you want to run on New data: i.e fetch FASTA from tsv 
+# Specify path to hg38 genome on your machine
+ref_genome = /home/s_vanantha/Desktop/IISERpBin/IISERP_Sem7/Sem7_LeelavatiNarlikar/Sem7Proj/hg38/hg38.fa

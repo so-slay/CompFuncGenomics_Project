@@ -1,17 +1,16 @@
 import subprocess
 import sys 
 
+config_path = sys.argv[1] if len(sys.argv) > 1 else "01Default_config.txt"
 # List the scripts in the order you want them to run
 scripts = [
-    ["GetFASTAfromTSV.py", sys.argv[1]],
-    "markovNull.py",
-    "CrossValidationScores.py"  
-    "Plots.py"
+    ["GetFASTAfromTSV.py", config_path],
+    ["Plots.py"]
 ]
 
 for script in scripts:
     print(f"Running {script}...")
-    result = subprocess.run(["python", script], capture_output=True, text=True)
+    result = subprocess.run(["python", *script], capture_output=True, text=True)
     
     # Print the script's output
     print(result.stdout)
