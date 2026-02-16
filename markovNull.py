@@ -37,9 +37,8 @@ for bed in bed_files:
 dict_of_dfs = {}
 for bed, fasta in bed_fasta_dict.items():
     df_bed = pd.read_csv(bed, sep="\t", header=0)
-    df_fasta = pd.read_csv(fasta, header =None)
-    df_fastest = df_fasta.iloc[1::2].reset_index(drop=1) # Keep the sequences (only present in lines 1,3..)
-    df = pd.concat([df_bed, df_fastest], axis =1)
+    df_fasta = pd.read_csv(fasta, header =None, comment='>')
+    df = pd.concat([df_bed, df_fasta], axis =1)
     df.columns = header
     print(f'bed: {bed}; fasta: {fasta} concatenated to give: {df}')
     # Create a dictionary so dfs can be named

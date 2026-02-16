@@ -21,7 +21,7 @@ Default parameters are set in `01Default_config.py`:
 |-----------------|----------------------------|-------------|
 | `input_dir`     | (user-specified folder)     | Base folder for input FASTA/TSV files and outputs |
 | `files`         | chr4_200bp_bins.tsv         | TSV files to process (comma-separated if multiple) |
-| `markov_order`  | 10                          | Order for Markov chain |
+| `markov_order`  | 5                          | Order for Markov chain |
 | `k_fold`        | 5                           | Number of folds for cross-validation |
 | `which_factor`  | CTCF                        | Choose TF: CTCF, REST, or EP300 |
 
@@ -113,6 +113,6 @@ For record-keeping/choosing specific files from a list of files and other compli
 ## Blame:
 
 #### **Worklfow implementation, Markov Recursion, Cross-Validation** - S. V. Ananthakrishna
-#### **ROCs, Statististics, Plots** -Saahil Dholakia
+#### **ROCs, Statistics, Plots** -Saahil Dholakia
 ---
 
