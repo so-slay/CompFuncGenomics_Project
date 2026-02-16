@@ -61,9 +61,10 @@ def kfold_cv(df, kfolds=kfolds, markov_order=markov_order, which_factor=which_fa
     # Define Folds:
     fold_sizes = np.full(kfolds, len(df)//kfolds)
     fold_sizes[:len(df)%kfolds] += 1
-
+    
     # Split into k folds 
     folds = np.split(idx, np.cumsum(fold_sizes)[:-1])
+
 
     # Placeholder for loglikelihood scores
     log_li_s = np.zeros(len(df), dtype=float) 
@@ -98,24 +99,24 @@ output_dir.mkdir(parents=True, exist_ok=True)
 runtimes = []
 
 def main():
-    for markov_order in range(0, 11):
+    for iterable_markov_order in range(0, 11):
         subTime = time.time()
         for k, df in mm.dict_of_dfs.items():
-            df["llr"] = kfold_cv(df)
+            df["llr"] = kfold_cv(df, kfolds=5, markov_order=iterable_markov_order)
             # Write output
-            outfile = output_dir / f"{markov_order}-Order-{kfolds}-foldCV_loglikelihoods-{k}.tsv"
+            outfile = output_dir / f"{iterable_markov_order}-Order-{kfolds}-foldCV_loglikelihoods-{k}.tsv"
             df.to_csv(outfile, sep="\t", index=False)
         
         endsubTime = time.time()
         runTime = endsubTime- subTime
-        runtimes.append((markov_order, runTime))
-        print(f"Runtime at order {markov_order}: {runTime:.4f} seconds")
+        runtimes.append((iterable_markov_order, runTime))
+        print(f"Runtime at order {iterable_markov_order}: {runTime:.4f} seconds")
         
     end = time.time()
 
     print(f"Runtime for 11 orders: {end - start} seconds")
 
-    # I used ChatGPT for building the dataframe below and plotting the runtimes
+    # I used ChatGPT for coding the dataframe below and plotting the runtimes
     # Write each df out into cache
     runtime_df = pd.DataFrame(runtimes, columns=["order", "helper_runtime"])
     runtime_df["helper_constant"] = mm.helperRunTime

@@ -12,9 +12,11 @@ def read_config(path):
     with open(path, "r") as f:
         for line in f:
             line = line.strip()
-        # Ignore empty lines/comments (start with #)
+            # Ignore empty lines/comments (start with #)
             if not line or line.startswith("#"):
                 continue
+            if "=" not in line:
+                print(f"skipping line{line}")
             key,val = line.split("=", 1)   
             config[key.strip()] = val.strip()
     return config

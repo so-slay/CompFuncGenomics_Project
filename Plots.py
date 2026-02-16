@@ -6,8 +6,10 @@ import markovNull as mm
 import GetFASTAfromTSV as gf
 from pathlib import Path
 
+
 def plotter(file):
     # Load your data
+    
     df = pd.read_csv(file, sep="\t" )
 
     # Choose target column (change as needed)
@@ -17,7 +19,7 @@ def plotter(file):
     y_true = df[target].values
 
     # Prediction scores (use llr; if lower = stronger signal, multiply by -1)
-    y_score = df["llr"].values  
+    y_score = df["llr"].values  # Sometimes -df["llr"] shows positive AUC
 
     # -------------------
     # ROC Curve
@@ -93,10 +95,11 @@ def main(files: list):
     # -------------------
     plt.figure(figsize=(10, 8))
 
-
+slice_at = []
 if __name__ == "__main__":
     tsv_files = cv.pipeline_cv(mm.dict_of_dfs)
     main(tsv_files)
+    
 
 
 
