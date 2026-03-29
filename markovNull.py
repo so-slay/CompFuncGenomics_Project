@@ -108,7 +108,7 @@ def markov_k(seq_list, k=order_k):
     # pseudocounts (For postmidsem- Bayesian stuff) 
     pseudoc = int(1)
     for k_prefix,vals in counts.items():
-        total = total = sum(vals.get(nt, 0) + pseudoc for nt in nucleotides)
+        total = sum(vals.get(nt, 0) + pseudoc for nt in nucleotides)
 
         markov_model[k_prefix] = {}
 
