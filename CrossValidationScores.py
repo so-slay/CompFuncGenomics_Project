@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd 
 
+from sklearn.model_selection import StratifiedKFold
 
 start = time.time()
 
@@ -47,37 +48,26 @@ def loglikely_cv(train_df, val_df, which_factor, markov_order):
     unb_model = mm.markov_k(unbound_seqs, markov_order)
 
     # Score bound and unbound regions in validation set
-    ll_bdd = val_df["sequence"].apply(lambda seq: mm.sequence_score(seq, bdd_model, unb_model, markov_order))
-    ll_unb = val_df["sequence"].apply(lambda seq: mm.sequence_score(seq, unb_model, bdd_model, markov_order))
+    llr = val_df["sequence"].apply(
+        lambda seq: mm.sequence_score(seq, bdd_model, unb_model, markov_order)
+    )
 
-    llr = ll_bdd - ll_unb
     return llr
 
 def kfold_cv(df, kfolds=kfolds, markov_order=markov_order, which_factor=which_factor):
-    #Shuffle df
-    idx = np.arange(len(df))
-    np.random.shuffle(idx)
-
-    # Define Folds:
-    fold_sizes = np.full(kfolds, len(df)//kfolds)
-    fold_sizes[:len(df)%kfolds] += 1
-    
-    # Split into k folds 
-    folds = np.split(idx, np.cumsum(fold_sizes)[:-1])
-
-
     # Placeholder for loglikelihood scores
     log_li_s = np.zeros(len(df), dtype=float) 
-    
-    for i in range(kfolds):
-        cv_ids = folds[i]
-        # Define which indices are trainig vs. validation
-        train_idx = np.hstack([folds[j] for j in range(kfolds) if j != i])
-        # Map these indices to df    
-        train_df = df.iloc[train_idx]
-        cv_df = df.iloc[cv_ids]
 
-        log_li_s[cv_ids] = loglikely_cv(train_df, cv_df, which_factor, markov_order)
+    X = df["sequence"]  # just a placeholder, we only need indices
+    y = df[which_factor].to_numpy()
+
+    skf = StratifiedKFold(n_splits=kfolds, shuffle=True, random_state=42)
+
+    for train_idx, cv_idx in skf.split(X, y):
+        train_df = df.iloc[train_idx]
+        cv_df = df.iloc[cv_idx]
+
+        log_li_s[cv_idx] = loglikely_cv(train_df, cv_df, which_factor, markov_order)
 
     return log_li_s
 

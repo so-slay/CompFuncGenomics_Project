@@ -30,6 +30,5 @@ end  = time.time()
 
 
 print(f"Exiting script. Runtime: {end-start} seconds.")
-print(f"What's the difference between an alligator and a crocodile? One sees you later, the other, in a while")
 
 

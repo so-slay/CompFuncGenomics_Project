@@ -108,7 +108,7 @@ def markov_k(seq_list, k=order_k):
     # pseudocounts (For postmidsem- Bayesian stuff) 
     pseudoc = int(1)
     for k_prefix,vals in counts.items():
-        total = sum(v + pseudoc for v in vals.values())
+        total = total = sum(vals.get(nt, 0) + pseudoc for nt in nucleotides)
 
         markov_model[k_prefix] = {}
 
@@ -122,7 +122,7 @@ def markov_k(seq_list, k=order_k):
 def sequence_score(seq, markov_pos_model, markov_neg_model, k=order_k):
 
     # Score each sequence in the list using the trained models 
-    default_log_p = math.log(1e-6)
+    default_log_p = math.log(1/4) # Assumes any nucleotide is equally likely
     log_lhood = 0.0
 
     for i in range(len(seq) - k):
@@ -143,22 +143,17 @@ def loglikely(df, bdd_mask):
     # Output: log_likelihood ratio for each sequence in 
 
     # Extract sequence col as list
-    bound_seqs = df.loc[bound_mask, "sequence"].tolist()
-    unbound_seqs = df.loc[~bound_mask, "sequence"].tolist()
+    bound_seqs = df.loc[bdd_mask, "sequence"].tolist()
+    unbound_seqs = df.loc[~bdd_mask, "sequence"].tolist()
 
     # learn Markov model of order k on it
     bdd_model = markov_k(bound_seqs, order_k)
     unb_model = markov_k(unbound_seqs, order_k)
 
-    # Calculate log-likelihoods from each model
-    ll_bdd = df["sequence"].apply(
-        lambda seq: sequence_score(seq, bdd_model)
-    )
-    ll_unb = df["sequence"].apply(
-        lambda seq: sequence_score(seq, unb_model)
+    llr = df["sequence"].apply(
+        lambda seq: sequence_score(seq, bdd_model, unb_model)
     )
 
-    llr = ll_bdd - ll_unb
     return llr
 
 
