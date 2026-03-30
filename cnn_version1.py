@@ -7,6 +7,7 @@ from sklearn.metrics import roc_curve, auc, precision_recall_curve
 from sklearn.model_selection import KFold
 import matplotlib.pyplot as plt
 import os
+import time
 
 # -------------------------
 # SETTINGS
@@ -115,16 +116,24 @@ def predict(model, X):
 # -------------------------
 # LOAD FILE HANDLER
 # -------------------------
-def get_files(chr_num):
-    fasta = f"chr{chr_num}_200bp_bins.fa"
-    tsv = f"chr{chr_num}_200bp_bins.tsv"
 
+def get_files(chr_num):
+    # Define directories
+    fasta_dir = "FASTAs"
+    tsv_dir = "projectData"
+
+    # Build file paths
+    fasta = os.path.join(fasta_dir, f"chr{chr_num}_200bp_bins.fa")
+    tsv = os.path.join(tsv_dir, f"chr{chr_num}_200bp_bins.tsv")
+
+    # Fallback if files don't exist
     if not os.path.exists(fasta):
-        fasta = f"chr{chr_num}_200bp_bins_unknown.fa"
+        fasta = os.path.join(fasta_dir, f"chr{chr_num}_200bp_bins_unknown.fa")
     if not os.path.exists(tsv):
-        tsv = f"chr{chr_num}_200bp_bins_unknown.tsv"
+        tsv = os.path.join(tsv_dir, f"chr{chr_num}_200bp_bins_unknown.tsv")
 
     return fasta, tsv
+
 
 # -------------------------
 # PREP DATA
