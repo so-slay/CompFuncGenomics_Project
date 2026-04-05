@@ -1,12 +1,31 @@
-2026-04-05 10:48:07 | INFO | ============================================================
-2026-04-05 10:48:07 | INFO | predict.py — +ALL config | TTA | undersampling
-2026-04-05 10:48:07 | INFO |   TFs       : ['CTCF', 'REST', 'EP300']
-2026-04-05 10:48:07 | INFO |   Predict   : chr[3, 10, 17]
-2026-04-05 10:48:07 | INFO |   Train chrs: 19 (all labeled)
-2026-04-05 10:48:07 | INFO |   NEG_RATIO : 5
-2026-04-05 10:48:07 | INFO |   EPOCHS    : 20  PATIENCE=3
-2026-04-05 10:48:07 | INFO |   DEVICE    : cuda
-2026-04-05 10:48:07 | INFO | ============================================================
-2026-04-05 10:48:07 | INFO | 
-Loading 19 labeled chromosomes...
-2026-04-05 10:48:12 | INFO | Retraining +ALL on 19 chromosomes | in_ch=9 | EPOCHS=20 | PATIENCE=3 | NEG_RATIO=5 | device=cuda
+14:58:19 | ============================================================
+14:58:19 | predict.py — +ALL config | self-contained train+predict
+14:58:19 |   Train chrs : [1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22]
+14:58:19 |   Pred chrs  : [3, 10, 17]
+14:58:19 |   IN_CH      : 9  (DNA + ATAC + METH + PWM)
+14:58:19 |   DEVICE     : cuda
+14:58:19 | ============================================================
+14:58:19 | 
+Loading 19 training chromosomes...
+14:58:20 |   Loaded chr1: 694,358 sequences
+14:58:21 |   Loaded chr2: 793,790 sequences
+14:58:21 |   Loaded chr4: 590,622 sequences
+14:58:22 |   Loaded chr5: 569,254 sequences
+14:58:22 |   Loaded chr6: 554,728 sequences
+14:58:23 |   Loaded chr7: 495,258 sequences
+14:58:23 |   Loaded chr8: 446,190 sequences
+14:58:24 |   Loaded chr9: 369,514 sequences
+14:58:24 |   Loaded chr11: 400,670 sequences
+14:58:24 |   Loaded chr12: 388,832 sequences
+14:58:25 |   Loaded chr13: 328,258 sequences
+14:58:25 |   Loaded chr14: 281,568 sequences
+14:58:25 |   Loaded chr15: 263,712 sequences
+14:58:26 |   Loaded chr16: 232,804 sequences
+14:58:26 |   Loaded chr18: 258,120 sequences
+14:58:26 |   Loaded chr19: 134,016 sequences
+14:58:26 |   Loaded chr20: 178,936 sequences
+14:58:26 |   Loaded chr21: 126,274 sequences
+14:58:26 |   Loaded chr22: 110,320 sequences
+14:58:28 | 
+Training +ALL | in_ch=9 | 19 chromosomes | DEVICE=cuda
+14:58:28 | EPOCHS=20 | PATIENCE=5 | NEG_RATIO=5
