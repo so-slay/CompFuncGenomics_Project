@@ -161,6 +161,14 @@ def precompute_pwm(pssms, motif_lens):
 
         fasta_path = os.path.join(FASTA_DIR, f"chr{c}_200bp_bins.fa")
         if not os.path.exists(fasta_path):
+            for suffix in ["_unkown.fa", "_unknown.fa"]:
+                alt = os.path.join(FASTA_DIR, f"chr{c}_200bp_bins{suffix}")
+                if os.path.exists(alt):
+                    fasta_path = alt
+                    print(f"  chr{c}: using alternate FASTA name: {os.path.basename(fasta_path)}")
+                    break
+
+        if not os.path.exists(fasta_path):
             print(f"No FASTA for chr{c}, skipping")
             continue
 
