@@ -1,207 +1,447 @@
 """
-pwm_precompute.py
+predict.py
 
-Computes per-bin PWM match scores for CTCF and REST using JASPAR motifs
-(MA0139.1 and MA0138.2 respectively). For each 200bp bin, scans both strands
-of the DNA sequence and records the maximum log-odds score across all positions.
-EP300 has no DNA-binding domain so its channel is set to zeros throughout.
-Scores are computed against a uniform background (0.25 per base).
-Outputs one float32 array of shape (num_bins, 3) per chromosome where
-columns are [CTCF_score, REST_score, EP300_zeros].
+Self-contained train + predict pipeline.
+No model selection — hardcoded +ALL config (DNA + ATAC + METH + PWM).
 
-Input:  data/raw/FASTAs/chr{c}_200bp_bins.fa
-Output: data/processed/chr{c}_pwm.npy
+Training chromosomes: all labeled chrs except 3, 10, 17
+  [1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22]
 
-Usage: python src/pwm_precompute.py
+Prediction chromosomes: 3, 10, 17
+
+Output:
+  predictions/chr{3,10,17}_predictions.tsv.gz
+  predictions/loss_curve.png
+  predictions/pred_distributions.png
+  predictions/predict.log
+  models/checkpoints/retrained_model.pt
+  models/checkpoints/retrained_config.json
+
+Usage: python src/predict.py
 """
 
-
-
 import os
+import sys
+import copy
+import json
+import logging
 import numpy as np
-import urllib.request
-from Bio import motifs
+import pandas as pd
+import torch
+import torch.optim as optim
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
-# ---------------- CONFIG ----------------
-FASTA_DIR = "data/raw/FASTAs"
-OUT_DIR   = "data/processed"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-TRAIN_CHRS = [c for c in range(1, 23) if c not in [3, 10, 17]]
-TEST_CHRS  = [3, 10, 17]
-ALL_CHRS   = TRAIN_CHRS + TEST_CHRS
+from noGarbageIn import (
+    PRED_CHRS,
+    load_chromosome,
+    encode_batch,
+    reverse_complement,
+)
+from model import CNN, FocalLoss
 
-JASPAR_IDS = {
-    "CTCF": "MA0139.1",
-    "REST": "MA0138.2",
-}
-BACKGROUND = {"A": 0.25, "C": 0.25, "G": 0.25, "T": 0.25}
-PSEUDOCOUNT = 0.1
 
-# ---------------- MOTIF LOADING ----------------
-def fetch_pwm(tf_name, jaspar_id):
+# ─────────────────────────────────────────────
+#  CONFIG
+# ─────────────────────────────────────────────
+DEVICE     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+BATCH_SIZE = 512
+EPOCHS     = 20
+PATIENCE   = 5          # early stopping on train loss
+LR         = 3e-4
+NEG_RATIO  = 5          # negatives per positive per chromosome; None = use all
+
+# All chromosomes except the three prediction targets
+TRAIN_CHRS = [1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22]
+
+# +ALL feature config — hardcoded, no selection
+USE_ATAC = True
+USE_METH = True
+USE_PWM  = True
+IN_CH    = 4 + 1 + 1 + 3   # DNA=4, ATAC=1, METH=1, PWM=3 → 9
+
+TF_LIST  = ["CTCF", "REST", "EP300"]
+
+CKPT_DIR = "models/checkpoints"
+PRED_DIR = "predictions"
+LOG_PATH = os.path.join(PRED_DIR, "predict.log")
+
+
+# ─────────────────────────────────────────────
+#  LOGGING
+# ─────────────────────────────────────────────
+def setup_logging():
+    os.makedirs(PRED_DIR, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(message)s",
+        datefmt="%H:%M:%S",
+        handlers=[
+            logging.FileHandler(LOG_PATH, mode="w"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
+
+log = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────
+#  UNDERSAMPLING
+# ─────────────────────────────────────────────
+def undersample(X, y, neg_ratio):
     """
-    Downloads motif from JASPAR API and returns a log-odds PWM as a
-    dict of numpy arrays keyed by nucleotide {A, C, G, T},
-    each of shape (motif_length,).
+    Keep all positive bins; sample neg_ratio x n_pos negatives.
+    A bin is positive if ANY TF is bound (any column == 1).
+    Returns contiguous arrays safe for torch.from_numpy.
     """
-    url  = f"https://jaspar.elixir.no/api/v1/matrix/{jaspar_id}/?format=jaspar"
-    path = f"/tmp/{jaspar_id}.jaspar"
+    if neg_ratio is None:
+        return X, y
 
-    if not os.path.exists(path):
-        print(f"  Downloading {tf_name} ({jaspar_id})...")
-        urllib.request.urlretrieve(url, path)
+    pos_mask = y.any(axis=1)
+    pos_idx  = np.where(pos_mask)[0]
+    neg_idx  = np.where(~pos_mask)[0]
 
-    with open(path) as f:
-        motif = motifs.read(f, "jaspar")
+    n_pos  = len(pos_idx)
+    n_keep = min(neg_ratio * n_pos, len(neg_idx))
 
-    pwm = motif.counts.normalize(pseudocounts=PSEUDOCOUNT)
-    pssm = pwm.log_odds(background=BACKGROUND)
+    if n_pos == 0 or n_keep == 0:
+        return X, y
 
-    # Convert to plain numpy dict for fast scanning
-    return {
-        base: np.array(pssm[base], dtype=np.float32)
-        for base in "ACGT"
-    }, len(motif)
+    chosen_neg = np.random.choice(neg_idx, size=n_keep, replace=False)
+    keep_idx   = np.sort(np.concatenate([pos_idx, chosen_neg]))
 
-
-# ---------------- SCANNING (VECTORIZED) ----------------
-BASE_IDX = {"A": 0, "C": 1, "G": 2, "T": 3}
-
-rc_map = str.maketrans("ACGT", "TGCA")
-
-def build_pssm_matrix(pssm):
-    """Convert pssm dict to (4, motif_len) numpy matrix for vectorized scoring."""
-    return np.array([pssm["A"], pssm["C"], pssm["G"], pssm["T"]], dtype=np.float32)
-
-def reverse_complement(seq):
-    return seq.translate(rc_map)[::-1] 
-  
-
-def encode_sequence_fast(seq):
-    """Faster encoding using lookup table."""
-    lookup = np.full(128, -1, dtype=np.int8)
-    for base, idx in BASE_IDX.items():
-        lookup[ord(base)] = idx
-    arr = np.frombuffer(seq.upper().encode(), dtype=np.uint8)
-    return lookup[arr]
+    return (
+        np.ascontiguousarray(X[keep_idx]),
+        np.ascontiguousarray(y[keep_idx]),
+    )
 
 
-def score_sequence_vectorized(seq, pssm_matrix, motif_len):
+# ─────────────────────────────────────────────
+#  TRAIN ONE EPOCH
+# ─────────────────────────────────────────────
+def train_epoch(model, optimizer, criterion,
+                seqs_by_chr, atac_by_chr, meth_by_chr, pwm_by_chr, y_by_chr):
     """
-    Scans both strands with numpy stride tricks.
-    All windows scored simultaneously — no Python loop over positions.
-    Returns max log-odds score across all positions and both strands.
+    Encodes one chromosome at a time — keeps RAM bounded.
+    encode_batch returns (N, 200, C).
+    CNN.forward() does permute(0,2,1) internally — do NOT permute here.
     """
-    best = -np.inf
+    model.train()
+    total_loss = 0.0
+    n_batches  = 0
+    chr_order  = np.random.permutation(len(seqs_by_chr))
 
-    seq      = seq.upper()
-    strands  = [seq, reverse_complement(seq)]
+    for ci in tqdm(chr_order, desc="  chrs", leave=False):
+        # (N, 200, C) — CNN.forward permutes to (N, C, 200) internally
+        X_c = encode_batch(
+            seqs_by_chr[ci], atac_by_chr[ci],
+            meth_by_chr[ci], pwm_by_chr[ci],
+            USE_ATAC, USE_METH, USE_PWM,
+        )
+        y_c = y_by_chr[ci]
 
-    for s in strands:
-        enc = encode_sequence_fast(s)
-        n   = len(enc) - motif_len + 1
+        X_c, y_c = undersample(X_c, y_c, NEG_RATIO)
 
-        if n <= 0:
-            continue
+        idx = np.random.permutation(len(X_c))
 
-        # Build (n_windows, motif_len) view with stride tricks — no copy
-        shape   = (n, motif_len)
-        strides = (enc.strides[0], enc.strides[0])
-        windows = np.lib.stride_tricks.as_strided(enc, shape=shape, strides=strides)
+        for i in range(0, len(X_c), BATCH_SIZE):
+            batch_idx = idx[i : i + BATCH_SIZE]
 
-        # Mask windows containing N (-1)
-        valid_mask = (windows >= 0).all(axis=1)   # (n_windows,)
+            # fancy index → non-contiguous; force contiguous for from_numpy
+            xb = torch.from_numpy(
+                np.ascontiguousarray(X_c[batch_idx])
+            ).float().to(DEVICE)
 
-        if not valid_mask.any():
-            continue
+            yb = torch.from_numpy(
+                np.ascontiguousarray(y_c[batch_idx])
+            ).float().to(DEVICE)
 
-        valid_windows = windows[valid_mask]        # (n_valid, motif_len)
+            optimizer.zero_grad()
+            loss = criterion(model(xb), yb)
+            loss.backward()
+            optimizer.step()
 
-        # Score: for each position j, look up pssm_matrix[base, j]
-        # positions index: (n_valid, motif_len)
-        pos_idx      = np.arange(motif_len)
-        scores       = pssm_matrix[valid_windows, pos_idx].sum(axis=1)  # (n_valid,)
+            total_loss += loss.item()
+            n_batches  += 1
 
-        best = max(best, scores.max())
+        del X_c
+        if DEVICE.type == "cuda":
+            torch.cuda.empty_cache()
 
-    return float(best) if best != -np.inf else 0.0
-
-
-# ---------------- FASTA READING ----------------
-def read_fasta(path):
-    seqs, seq = [], ""
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith(">"):
-                if seq:
-                    seqs.append(seq)
-                    seq = ""
-            else:
-                seq += line
-        if seq:
-            seqs.append(seq)
-    return seqs
+    return total_loss / max(n_batches, 1)
 
 
-# ---------------- MAIN ----------------
-def precompute_pwm(pssms, motif_lens):
+# ─────────────────────────────────────────────
+#  LOAD ALL TRAINING CHROMOSOMES
+# ─────────────────────────────────────────────
+def load_train_data():
+    """
+    Loads raw sequences + scalars for all training chromosomes.
+    Does NOT encode — encoding happens per-chromosome in train_epoch.
+    augment=True doubles data with reverse complements for free.
+    """
+    seqs_list, atac_list, meth_list, pwm_list, y_list = [], [], [], [], []
 
-    pssm_matrices = {
-        tf: build_pssm_matrix(pssm)
-        for tf, pssm in pssms.items()
-    }
+    for c in TRAIN_CHRS:
+        seqs, atac, meth, pwm, y, _ = load_chromosome(c, augment=True)
+        seqs_list.append(seqs)
+        atac_list.append(atac)
+        meth_list.append(meth)
+        pwm_list.append(pwm)
+        y_list.append(y)
+        log.info(f"  Loaded chr{c}: {len(seqs):,} sequences")
 
-    for c in ALL_CHRS:
-        out_path = os.path.join(OUT_DIR, f"chr{c}_pwm.npy")
+    return seqs_list, atac_list, meth_list, pwm_list, y_list
 
-        if os.path.exists(out_path):
-            print(f"chr{c} PWM already exists, skipping")
-            continue
 
-        fasta_path = os.path.join(FASTA_DIR, f"chr{c}_200bp_bins.fa")
-        if not os.path.exists(fasta_path):
-            for suffix in ["_unkown.fa", "_unknown.fa"]:
-                alt = os.path.join(FASTA_DIR, f"chr{c}_200bp_bins{suffix}")
-                if os.path.exists(alt):
-                    fasta_path = alt
-                    print(f"  chr{c}: using alternate FASTA name: {os.path.basename(fasta_path)}")
-                    break
+# ─────────────────────────────────────────────
+#  TRAIN
+# ─────────────────────────────────────────────
+def train(seqs_all, atac_all, meth_all, pwm_all, y_all):
+    """
+    Trains +ALL config on all TRAIN_CHRS.
+    Early stopping on train loss — no val set, using all data.
+    Saves best weights to CKPT_DIR/retrained_model.pt.
+    Returns (trained model, list of per-epoch losses).
+    """
+    os.makedirs(CKPT_DIR, exist_ok=True)
 
-        if not os.path.exists(fasta_path):
-            print(f"No FASTA for chr{c}, skipping")
-            continue
+    model     = CNN(in_ch=IN_CH, use_attn=True).to(DEVICE)
+    optimizer = optim.Adam(model.parameters(), lr=LR)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
+    criterion = FocalLoss(gamma=2)
 
-        seqs     = read_fasta(fasta_path)
-        num_bins = len(seqs)
+    log.info(f"\nTraining +ALL | in_ch={IN_CH} | "
+             f"{len(TRAIN_CHRS)} chromosomes | DEVICE={DEVICE}")
+    log.info(f"EPOCHS={EPOCHS} | PATIENCE={PATIENCE} | NEG_RATIO={NEG_RATIO}")
 
-        # shape: (num_bins, 3) — CTCF, REST, EP300
-        arr = np.zeros((num_bins, 3), dtype=np.float32)
+    best_loss    = float("inf")
+    best_state   = None
+    patience_ctr = 0
+    epoch_losses = []
 
-        for i, seq in enumerate(seqs):
-            arr[i, 0] = score_sequence_vectorized(seq, pssm_matrices["CTCF"], motif_lens["CTCF"])
-            arr[i, 1] = score_sequence_vectorized(seq, pssm_matrices["REST"],  motif_lens["REST"])
-            # arr[i, 2] stays 0.0 — EP300
+    for ep in range(1, EPOCHS + 1):
+        loss = train_epoch(
+            model, optimizer, criterion,
+            seqs_all, atac_all, meth_all, pwm_all, y_all,
+        )
+        scheduler.step()
+        epoch_losses.append(loss)
 
-            if i % 10000 == 0:
-                print(f"  chr{c}: {i}/{num_bins} bins scored")
+        lr_now = scheduler.get_last_lr()[0]
+        log.info(f"Epoch {ep:02d}/{EPOCHS} | loss={loss:.4f} | lr={lr_now:.6f}")
 
-        np.save(out_path, arr)
-        print(f"  chr{c}: saved {out_path}, shape {arr.shape}")
-        print(f"    CTCF score range: {arr[:,0].min():.2f} to {arr[:,0].max():.2f}")
-        print(f"    REST score range: {arr[:,1].min():.2f} to {arr[:,1].max():.2f}")
+        if loss < best_loss - 1e-5:
+            best_loss    = loss
+            best_state   = copy.deepcopy(model.state_dict())
+            patience_ctr = 0
+            torch.save(best_state,
+                       os.path.join(CKPT_DIR, "retrained_model.pt"))
+        else:
+            patience_ctr += 1
+            log.info(f"  No improvement ({patience_ctr}/{PATIENCE})")
+            if patience_ctr >= PATIENCE:
+                log.info(f"  Early stopping at epoch {ep}")
+                break
+
+    # reload best weights before returning
+    model.load_state_dict(best_state)
+    model.eval()
+    log.info(f"Best train loss: {best_loss:.4f}")
+    return model, epoch_losses
+
+
+# ─────────────────────────────────────────────
+#  INFERENCE HELPERS
+# ─────────────────────────────────────────────
+def _run_model(model, X):
+    """
+    Inference pass on pre-encoded X of shape (N, 200, C).
+    CNN.forward() does the permute — do NOT permute here.
+    Returns sigmoid probabilities (N, 3).
+    """
+    model.eval()
+    preds = []
+    with torch.no_grad():
+        for i in range(0, len(X), BATCH_SIZE):
+            xb = torch.from_numpy(
+                np.ascontiguousarray(X[i : i + BATCH_SIZE])
+            ).float().to(DEVICE)
+            preds.append(torch.sigmoid(model(xb)).cpu().numpy())
+    return np.vstack(preds)   # (N, 3)
+
+
+def predict_chromosome(model, c):
+    """
+    Loads unknown chromosome, runs fwd + RC TTA, returns (preds, df).
+    atac/meth/pwm scalars are strand-invariant — reused for RC pass.
+    """
+    # augment=False — we handle RC manually for TTA
+    seqs, atac, meth, pwm, _, df = load_chromosome(c, augment=False)
+    log.info(f"  chr{c}: {len(seqs):,} bins")
+
+    # forward pass
+    X_fwd = encode_batch(seqs, atac, meth, pwm, USE_ATAC, USE_METH, USE_PWM)
+    p_fwd = _run_model(model, X_fwd)
+    del X_fwd
+
+    # reverse complement pass (TTA)
+    rc_seqs = [reverse_complement(s) for s in seqs]
+    X_rc    = encode_batch(rc_seqs, atac, meth, pwm, USE_ATAC, USE_METH, USE_PWM)
+    p_rc    = _run_model(model, X_rc)
+    del X_rc
+
+    if DEVICE.type == "cuda":
+        torch.cuda.empty_cache()
+
+    preds = (p_fwd + p_rc) / 2.0    # (N, 3)
+
+    for i, tf in enumerate(TF_LIST):
+        col = preds[:, i]
+        log.info(f"    {tf}: min={col.min():.4f}  max={col.max():.4f}  "
+                 f"mean={col.mean():.4f}  "
+                 f">0.5: {(col > 0.5).sum():,} / {len(col):,}")
+
+    return preds, df
+
+
+# ─────────────────────────────────────────────
+#  WRITE OUTPUT TSV
+# ─────────────────────────────────────────────
+def write_predictions(df, preds, c):
+    out_df = df[["chr", "start", "end", "ATAC"]].copy()
+    for i, tf in enumerate(TF_LIST):
+        out_df[tf] = preds[:, i].round(6)
+
+    out_path = os.path.join(PRED_DIR, f"chr{c}_predictions.tsv.gz")
+    out_df.to_csv(out_path, sep="\t", index=False, compression="gzip")
+    log.info(f"  Saved → {out_path}")
+    return out_df
+
+
+# ─────────────────────────────────────────────
+#  PLOTS
+# ─────────────────────────────────────────────
+def plot_loss_curve(epoch_losses):
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(range(1, len(epoch_losses) + 1), epoch_losses,
+            marker="o", lw=2, color="#2196F3")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("FocalLoss (train)")
+    ax.set_title(f"+ALL | NEG_RATIO={NEG_RATIO} | "
+                 f"{len(TRAIN_CHRS)} train chromosomes")
+    ax.grid(alpha=0.3)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    plt.tight_layout()
+    path = os.path.join(PRED_DIR, "loss_curve.png")
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    log.info(f"Loss curve → {path}")
+
+
+def plot_pred_distributions(all_preds):
+    colors = {"CTCF": "#4C72B0", "REST": "#DD8452", "EP300": "#55A868"}
+    n_chrs = len(all_preds)
+
+    fig, axes = plt.subplots(
+        len(TF_LIST), n_chrs,
+        figsize=(4 * n_chrs, 3 * len(TF_LIST)),
+    )
+    axes = np.array(axes).reshape(len(TF_LIST), n_chrs)
+
+    for col_i, (c, (preds, _)) in enumerate(all_preds.items()):
+        for row_i, tf in enumerate(TF_LIST):
+            ax   = axes[row_i, col_i]
+            vals = preds[:, row_i]
+            ax.hist(vals, bins=60, color=colors[tf], alpha=0.8, edgecolor="none")
+            ax.axvline(0.5, color="black", ls="--", lw=1)
+            n_pos = (vals > 0.5).sum()
+            ax.set_title(
+                f"chr{c} | {tf}  >0.5: {n_pos:,} ({100*n_pos/len(vals):.1f}%)",
+                fontsize=9,
+            )
+            ax.set_xlabel("P(bound)", fontsize=8)
+            ax.set_ylabel("Bins", fontsize=8)
+            ax.tick_params(labelsize=7)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+
+    fig.suptitle("+ALL — Prediction Score Distributions",
+                 fontsize=12, fontweight="bold")
+    plt.tight_layout()
+    path = os.path.join(PRED_DIR, "pred_distributions.png")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    log.info(f"Prediction distributions → {path}")
+
+
+# ─────────────────────────────────────────────
+#  MAIN
+# ─────────────────────────────────────────────
+def main():
+    setup_logging()
+
+    log.info("=" * 60)
+    log.info("predict.py — +ALL config | self-contained train+predict")
+    log.info(f"  Train chrs : {TRAIN_CHRS}")
+    log.info(f"  Pred chrs  : {list(PRED_CHRS)}")
+    log.info(f"  IN_CH      : {IN_CH}  (DNA + ATAC + METH + PWM)")
+    log.info(f"  DEVICE     : {DEVICE}")
+    log.info("=" * 60)
+
+    # 1. load training data (raw sequences, no encoding yet)
+    log.info(f"\nLoading {len(TRAIN_CHRS)} training chromosomes...")
+    seqs_all, atac_all, meth_all, pwm_all, y_all = load_train_data()
+
+    # 2. train
+    model, epoch_losses = train(seqs_all, atac_all, meth_all, pwm_all, y_all)
+
+    # free training RAM before prediction
+    del seqs_all, atac_all, meth_all, pwm_all, y_all
+    if DEVICE.type == "cuda":
+        torch.cuda.empty_cache()
+
+    # save run metadata
+    with open(os.path.join(CKPT_DIR, "retrained_config.json"), "w") as f:
+        json.dump({
+            "config":     "+ALL",
+            "use_atac":   USE_ATAC,
+            "use_meth":   USE_METH,
+            "use_pwm":    USE_PWM,
+            "in_ch":      IN_CH,
+            "train_chrs": TRAIN_CHRS,
+            "pred_chrs":  list(PRED_CHRS),
+            "epochs_run": len(epoch_losses),
+            "neg_ratio":  NEG_RATIO,
+            "final_loss": round(epoch_losses[-1], 6),
+        }, f, indent=2)
+
+    plot_loss_curve(epoch_losses)
+
+    # 3. predict on unknown chromosomes
+    log.info(f"\nPredicting on chromosomes {list(PRED_CHRS)}...")
+    all_preds = {}
+
+    for c in PRED_CHRS:
+        log.info(f"\nchr{c}:")
+        preds, df    = predict_chromosome(model, c)
+        out_df       = write_predictions(df, preds, c)
+        all_preds[c] = (preds, out_df)
+
+    plot_pred_distributions(all_preds)
+
+    log.info("\n" + "=" * 60)
+    log.info("Done.")
+    log.info(f"  Predictions → {PRED_DIR}/")
+    log.info(f"  Checkpoint  → {CKPT_DIR}/retrained_model.pt")
+    log.info(f"  Log         → {LOG_PATH}")
+    log.info("=" * 60)
 
 
 if __name__ == "__main__":
-    os.makedirs(OUT_DIR, exist_ok=True)
-
-    print("Fetching motifs from JASPAR...")
-    pssms, motif_lens = {}, {}
-    for tf, jid in JASPAR_IDS.items():
-        pssms[tf], motif_lens[tf] = fetch_pwm(tf, jid)
-        print(f"  {tf}: motif length {motif_lens[tf]}")
-
-    print("\nScanning sequences...")
-    precompute_pwm(pssms, motif_lens)
-
-    print("\nDone.")
+    main()
