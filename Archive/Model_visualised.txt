@@ -1,0 +1,88 @@
+Input: (N, 200, C)
+       C = 4 / 5 / 6 channels
+
+        │
+        ▼
+Transpose
+(N, C, 200)
+(PyTorch Conv1D format)
+
+        │
+        ▼
+┌──────────────────────────────┐
+│      ResBlock #1             │
+│  Conv1d(C → 64, k=7)         │
+│  BN + ReLU                   │
+│  Conv1d(64 → 64, k=5)        │
+│  BN                          │
+│  + Skip Connection           │
+└──────────────────────────────┘
+
+        │
+        ▼
+MaxPool1d (÷2 length)
+→ (N, 64, 100)
+
+        │
+        ▼
+┌──────────────────────────────┐
+│      ResBlock #2             │
+│  Conv1d(64 → 128, k=7)       │
+│  BN + ReLU                   │
+│  Conv1d(128 → 128, k=5)      │
+│  BN                          │
+│  + Skip (1x1 conv)           │
+└──────────────────────────────┘
+
+        │
+        ▼
+MaxPool1d (÷2 length)
+→ (N, 128, 50)
+
+        │
+        ▼
+┌──────────────────────────────┐
+│      ResBlock #3             │
+│  Conv1d(128 → 128, k=7)      │
+│  BN + ReLU                   │
+│  Conv1d(128 → 128, k=5)      │
+│  BN                          │
+│  + Skip Connection           │
+└──────────────────────────────┘
+
+        │
+        ▼
+Global Max Pool
+(AdaptiveMaxPool1d → 1)
+
+→ (N, 128, 1)
+
+        │
+        ▼
+Flatten
+→ (N, 128)
+
+        │
+        ▼
+Fully Connected Layer
+128 → 64
+
+        │
+        ▼
+ReLU + Dropout (0.5)
+
+        │
+        ▼
+Final Layer
+64 → 3
+
+        │
+        ▼
+Output (logits)
+→ (N, 3)
+(one per TF: CTCF, REST, EP300)
+
+        │
+        ▼
+Sigmoid (during evaluation)
+→ probabilities

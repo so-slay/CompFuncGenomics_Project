@@ -1,0 +1,12 @@
+2026-04-05 10:48:07 | INFO | ============================================================
+2026-04-05 10:48:07 | INFO | predict.py — +ALL config | TTA | undersampling
+2026-04-05 10:48:07 | INFO |   TFs       : ['CTCF', 'REST', 'EP300']
+2026-04-05 10:48:07 | INFO |   Predict   : chr[3, 10, 17]
+2026-04-05 10:48:07 | INFO |   Train chrs: 19 (all labeled)
+2026-04-05 10:48:07 | INFO |   NEG_RATIO : 5
+2026-04-05 10:48:07 | INFO |   EPOCHS    : 20  PATIENCE=3
+2026-04-05 10:48:07 | INFO |   DEVICE    : cuda
+2026-04-05 10:48:07 | INFO | ============================================================
+2026-04-05 10:48:07 | INFO | 
+Loading 19 labeled chromosomes...
+2026-04-05 10:48:12 | INFO | Retraining +ALL on 19 chromosomes | in_ch=9 | EPOCHS=20 | PATIENCE=3 | NEG_RATIO=5 | device=cuda

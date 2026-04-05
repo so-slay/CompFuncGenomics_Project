@@ -1,0 +1,19 @@
+Notes.txt
+5:00 PM, Saturday
+
+
+Encoding Methylation Data:
+DO
+
+Use ATAC Data:
+DO
+
+Variable loss rate: 
+DO
+
+VALIDATION:
+track best validation per epoch
+
+Things to Learn: 
+1. skip connections?
+2. Focal loss 
