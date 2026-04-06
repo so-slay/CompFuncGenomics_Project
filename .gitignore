@@ -1,3 +1,4 @@
 chr1_200bp_bins.bed
 FASTAs/chr1_200bp_bins.fa
 sandbox.py
+cache/
