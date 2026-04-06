@@ -1,0 +1,6 @@
+We used CpG Methylation data from ENCODE.
+Since the file is large, and already publibly hosted, here is a pointer to it:
+WGBS Methylation at CpG sites, in K562 Cells
+https://www.encodeproject.org/files/ENCFF660IHA/
+
+Download and move the file (.bed.gz) here if you wish to run the code from scratch.

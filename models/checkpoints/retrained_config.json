@@ -1,0 +1,36 @@
+{
+  "config": "+ALL",
+  "use_atac": true,
+  "use_meth": true,
+  "use_pwm": true,
+  "in_ch": 9,
+  "train_chrs": [
+    1,
+    2,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    18,
+    19,
+    20,
+    21,
+    22
+  ],
+  "pred_chrs": [
+    3,
+    10,
+    17
+  ],
+  "epochs_run": 20,
+  "neg_ratio": 5,
+  "final_loss": 0.043391
+}

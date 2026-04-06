@@ -133,7 +133,13 @@ def load_chromosome(c, test=False, augment=False):
         y = df[TF_LIST].apply(lambda col: col.map({"B": 1.0, "U": 0.0})).astype(np.float32).values
 
     # --- FASTA ---
-    fasta_path = os.path.join(FASTA_DIR, f"chr{c}_200bp_bins.fa")
+    if test:
+        fasta_path = os.path.join(FASTA_DIR, f"chr{c}_200bp_bins_unknown.fa")
+    else:
+        fasta_path = os.path.join(FASTA_DIR, f"chr{c}_200bp_bins.fa")
+    if not os.path.exists(fasta_path):
+        raise FileNotFoundError(f"Missing FASTA for chr{c}: {fasta_path}")
+
     seqs       = read_fasta(fasta_path)
 
     # --- METHYLATION ---

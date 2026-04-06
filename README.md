@@ -14,7 +14,7 @@ Predicts transcription factor (TF) binding (`CTCF`, `REST`, `EP300`) using DNA s
 ---
 
 ## Dependencies
-- Python ≥ 3.8  
+- Python 3.10
 - numpy  
 - pandas  
 - torch  

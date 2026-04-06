@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
-from noGarbageIn_fast import load_chromosome, TRAIN_CHRS
+from NoGarbageIn_op import load_chromosome, TRAIN_CHRS
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
