@@ -1,6 +1,6 @@
 ## Computational Functional Genomics - Project
 
-# A CNN-based predictive model for TF-binding
+# VINCA: A CNN-based predictive model for TF-binding
 
 Predicts transcription factor (TF) binding (`CTCF`, `REST`, `EP300`) using DNA sequence, ATAC-seq, CpG methylation, and PWM features.
 
@@ -38,45 +38,41 @@ Predicts transcription factor (TF) binding (`CTCF`, `REST`, `EP300`) using DNA s
 - matplotlib
 - tqdm
 
-Install:
-
-```bash
-pip install numpy pandas torch scikit-learn matplotlib tqdm
----
 
 ## Features
 - Multi-TF CNN model with sequence + ATAC input  
 - Cross-validation on chromosome 1  
-- Final model training on chromosomes 1–22  
+- Final model training on chromosomes [1–22] 
 - Generates predictions for specific chromosomes (3, 10, 17)  
 - Saves ROC curves and AUC results  
 
 ---
+## Running the Model
 
-## Dependencies
-- Python 3.10
-- numpy  
-- pandas  
-- torch  
-- scikit-learn  
-- matplotlib  
+### 1. Full Run (Train → Select Best Model → Predict)
+Execute the main pipeline:
+
+```python
+python3 main.py
+```
+### 2. Fast Run (Prediction Only)
+
+Use this mode when confident about required inputs and/or if you want to skip model selection.
+
+**Steps:**
+
+1. Clear the checkpoints directory:
+
+```bash
+rm -r models/checkpoints/*
+```
+
+```python
+python3 predict.py
+```
+
+## Detailed info on VINCA: 
+See the model [Overview](Overview.md)
+
 
 ---
-
-## Project Structure
-.
-├── model.py           # CNN + residual + dilated conv + attention
-├── noGarbageIn.py     # Data loading + encoding pipeline
-├── predict.py         # Training + inference script
-├── data/
-│   ├── chr*_200bp_bins.fa
-│   ├── chr*_200bp_bins.tsv
-│   ├── *.npy (methylation + PWM)
-├── outputs/
-│   ├── chr3_predictions.tsv.gz
-│   ├── chr10_predictions.tsv.gz
-│   ├── chr17_predictions.tsv.gz
-│   ├── loss_curve.png
-│   ├── prediction_histograms.png
-
-

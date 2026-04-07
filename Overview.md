@@ -1,4 +1,6 @@
 # CFG Project Jan 2026
+## VINCA: A CNN-based model to predict TF-binding probabilities
+Task at hand: 
 Predicting binding probability of CTCF, REST, EP300 on chr3, chr10, chr17 (K562, hg38)
 Final output: chr3/10/17_predictions.tsv.gz with probability scores per TF per 200bp bin
 
@@ -34,7 +36,7 @@ Final output: chr3/10/17_predictions.tsv.gz with probability scores per TF per 2
 ```
 ---
 
-## Overview
+## Code Overview 
 
 ### methylation_precompute.py
 - Source: ENCFF660IHA.bed.gz (ENCODE WGBS, K562, gemBS bed9+ CpG format)
@@ -69,13 +71,14 @@ Final output: chr3/10/17_predictions.tsv.gz with probability scores per TF per 2
 
 ---
 
-## Full Planned Workflow
+## Detailed workflow:
 
 ### STEP 1 — Precompute all features 
 python src/methylation_precompute.py  
-python src/pwm_precompute.py           
+python src/pwm_precompute.py        
+  
 
-### STEP 2 — dataset.py
+### STEP 2 — noGarbageIn.py
 Responsibilities:
 - read_fasta(path) → list of sequences
 - reverse_complement(seq)
@@ -88,28 +91,34 @@ Responsibilities:
 - load_chromosome(c, test=False) → seqs, atac, meth, pwm, y, df
 
 ### STEP 3 — model.py
-Planned architecture improvements:
 - Dilated convolutions in ResBlock for longer-range context
 - Configurable input channels (based on active features)
 - FocalLoss stays (handles class imbalance well)
 - DEVICE-aware throughout
 
 ### STEP 4 — train.py
-Planned training improvements:
-- GLOBAL training: pool all training chromosomes, don't train per-chromosome
+- GLOBAL training: pools all training chromosomes
 - Hold out one chromosome for validation (e.g. chr1)
-- More epochs (15-20) with early stopping (patience=3 on val ROC)
+- Choose batch size(512) and number of epochs(20) with early stopping (with patience=3 on val ROC)
 - CosineAnnealingLR scheduler
 - Config-based model selection stays: DNA / DNA+ATAC / DNA+ATAC+METH / DNA+ATAC+METH+PWM
   → best config selected by val ROC, worst configs pruned
 - Test-time augmentation: average predictions on fwd + reverse complement
 - DEVICE-aware throughout
+- Warning: Streaming not yet implemented, the script uses tons of RAM currently
 
 ### STEP 5 — predict.py
 - Load best_model.pt + best_config.json
 - Predict on chr3, chr10, chr17
 - TTA (fwd + RC average)
 - Output: predictions/chr{c}_predictions.tsv.gz
+
+#### Behaviour without best_model.pt
+- A key feature of this script is the fast forward feature: 
+You might already know what choice of inputs you want OR frequently one does not have the time and memory to train and choose the best model
+- training data is streamed to disk and read, to be able to run on even basic computers.
+- running predict.py without running train.py first generates a model in the ALL configuration: DNA + ATAC + JASPAR, trains on this for 20 Epochs, and predicts with this model.
+
 
 ### STEP 6 — main.py
 - Calls precompute → train → predict in sequence
@@ -146,12 +155,13 @@ Python 3.10 Nvidia GTX 1650 (Mobile) with Cuda took around 8 hours for 20 - Epoc
 | 6       | CTCF PWM score        | (1,)           | done    |
 | 7       | REST PWM score        | (1,)           | done    |
 | 8       | EP300 PWM (zeros)     | (1,)           | all 0    |
-| 9       | RNA-seq log TPM       | (1,)           | toDo |
+| 9       | RNA-seq log TPM       | (1,)           | toDo(Future work) |
 
 ---
 
 ## Strategy: 
-- Based primarily on discussions in class, and Claude AI later. Credit also to SLDS/Pranay Goel for insights and motivation.
+
+- Based primarily on discussions in class: Computational Functional Genomics taught by Prof, Leelavati Narlikar at IISER Pune. Credit also to Claude AI for countless debugs and optimizations that allowed this code to be written; and the book 'An introduction to statistical learning' (Hastie et al) for insights and motivation with handling data.
 
 
 **Split strategy:** Not doing: Chromosome-level 70/15/15 split: not random (nearby bins are correlated)
@@ -184,4 +194,9 @@ Test-time augmentation: average predictions on forward + reverse complement stra
 CUDA-aware throughout. Precompute scripts are CPU-only (I/O bound).
 
 ---
+
+### What's vinca?
+Variable Input Network of Convolutions Affinity-mapper
+Inspired by the latin: vincire "to bind"
+
 
