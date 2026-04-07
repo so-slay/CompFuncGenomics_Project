@@ -1,6 +1,6 @@
-# CNN-based TF Binding Prediction with ATAC-seq
+## Computational Functional Genomics - Project
 
-# CNN-based TF Binding Prediction with ATAC + Epigenomics
+# A CNN-based predictive model for TF-binding
 
 Predicts transcription factor (TF) binding (`CTCF`, `REST`, `EP300`) using DNA sequence, ATAC-seq, CpG methylation, and PWM features.
 
