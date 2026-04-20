@@ -2,14 +2,14 @@
 
 # VINCA: A CNN-based predictive model for TF-binding
 
-Predicts transcription factor (TF) binding (`CTCF`, `REST`, `EP300`) using DNA sequence, ATAC-seq, CpG methylation, and PWM features.
+Predict transcription factor (TF) binding (`CTCF`, `REST`, `EP300`) using DNA sequence, ATAC-seq, CpG methylation, and PWM features.
 
 ---
 
 ## Features
 
-- Multi-TF CNN model with sequence + ATAC + methylation + PWM input**
-- Input encoding: (N × 200 × 9) tensor**
+- Multi-TF CNN model with sequence + ATAC + methylation + PWM input
+- Input encoding: (N × 200 × 9) tensor
 - Residual CNN + dilated convolutions + attention
 - Reverse complement augmentation (training + inference)
 - Chromosome-wise training (no leakage)
